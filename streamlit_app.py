@@ -274,18 +274,3 @@ else:
 st.markdown("---")
 
 
-st.info(
-"""
-### Working
-
-🖐 MediaPipe detects hand landmarks
-
-👍 Thumb + Index finger distance is calculated
-
-📏 Distance converted into brightness %
-
-🌐 Streamlit Cloud supports webcam detection
-
-⚠️ Actual laptop brightness control works only locally
-"""
-)
