@@ -1,8 +1,14 @@
 import streamlit as st
 import cv2
-import numpy as np
+import av
 import time
+import numpy as np
 import os
+
+from streamlit_webrtc import (
+    webrtc_streamer,
+    VideoProcessorBase
+)
 
 from utils.hand_detector import HandDetector
 from utils.brightness_controller import BrightnessController
@@ -22,7 +28,10 @@ st.set_page_config(
 )
 
 
-st.title("🖐 Hand Gesture Based Screen Brightness Control")
+st.title(
+    "🖐 Hand Gesture Based Screen Brightness Control"
+)
+
 st.markdown("---")
 
 
@@ -30,7 +39,9 @@ st.markdown("---")
 # Sidebar
 # ----------------------------
 
-st.sidebar.title("Project Settings")
+st.sidebar.title(
+    "Project Settings"
+)
 
 
 detect_conf = st.sidebar.slider(
@@ -49,226 +60,209 @@ track_conf = st.sidebar.slider(
 )
 
 
+
 # ----------------------------
-# Dashboard Layout
+# Dashboard
 # ----------------------------
 
-col1, col2 = st.columns([3, 1])
+col1, col2 = st.columns(
+    [3,1]
+)
 
 
-frame_placeholder = col1.empty()
+status_box = col2.empty()
 
+brightness_box = col2.empty()
 
-status = col2.empty()
+distance_box = col2.empty()
 
-brightness_text = col2.empty()
-
-distance_text = col2.empty()
-
-
-fps_text = col2.empty()
-
+fps_box = col2.empty()
 
 progress = col2.progress(0)
 
 
 
 # ----------------------------
-# Camera Input
+# Video Processor
 # ----------------------------
 
-st.subheader("📷 Camera")
+class HandGestureProcessor(
+    VideoProcessorBase
+):
 
-image = st.camera_input(
-    "Capture your hand"
+    def __init__(self):
+
+        self.detector = HandDetector(
+            detectionCon=detect_conf,
+            trackCon=track_conf
+        )
+
+        self.brightness = BrightnessController()
+
+        self.brightnessValue = 0
+        self.distance = 0
+        self.fps = 0
+
+        self.prev_time = time.time()
+
+
+
+    def recv(self, frame):
+
+        img = frame.to_ndarray(
+            format="bgr24"
+        )
+
+
+        img = cv2.flip(
+            img,
+            1
+        )
+
+
+        img = self.detector.findHands(
+            img
+        )
+
+
+        lmList = self.detector.findPosition(
+            img
+        )
+
+
+
+        if len(lmList) != 0:
+
+
+            x1 = lmList[4][1]
+            y1 = lmList[4][2]
+
+
+            x2 = lmList[8][1]
+            y2 = lmList[8][2]
+
+
+
+            cv2.circle(
+                img,
+                (x1,y1),
+                10,
+                (255,0,255),
+                cv2.FILLED
+            )
+
+
+            cv2.circle(
+                img,
+                (x2,y2),
+                10,
+                (255,0,255),
+                cv2.FILLED
+            )
+
+
+            cv2.line(
+                img,
+                (x1,y1),
+                (x2,y2),
+                (0,255,0),
+                3
+            )
+
+
+            self.distance = self.brightness.calculateDistance(
+                (x1,y1),
+                (x2,y2)
+            )
+
+
+            self.brightnessValue = self.brightness.distanceToBrightness(
+                self.distance
+            )
+
+
+        else:
+
+            self.brightnessValue = 0
+            self.distance = 0
+
+
+
+        current = time.time()
+
+
+        self.fps = 1/(current-self.prev_time)
+
+
+        self.prev_time = current
+
+
+
+        return av.VideoFrame.from_ndarray(
+            img,
+            format="bgr24"
+        )
+
+
+
+# ----------------------------
+# Start Webcam
+# ----------------------------
+
+ctx = webrtc_streamer(
+    key="hand-control",
+    video_processor_factory=HandGestureProcessor,
+    media_stream_constraints={
+        "video": True,
+        "audio": False
+    },
+    async_processing=True
 )
 
 
 
 # ----------------------------
-# Processing
+# Display Stats
 # ----------------------------
 
-if image is not None:
+if ctx.video_processor:
 
 
-    start_time = time.time()
+    processor = ctx.video_processor
 
 
-    detector = HandDetector(
-        detectionCon=detect_conf,
-        trackCon=track_conf
+    status_box.success(
+        "🟢 Camera Running"
     )
 
 
-    brightness = BrightnessController()
-
-
-
-    # Convert image
-
-    bytes_data = image.getvalue()
-
-
-    img = cv2.imdecode(
-        np.frombuffer(
-            bytes_data,
-            np.uint8
-        ),
-        cv2.IMREAD_COLOR
+    brightness_box.metric(
+        "Brightness",
+        f"{processor.brightnessValue}%"
     )
 
 
-
-    # Mirror image
-
-    img = cv2.flip(
-        img,
-        1
+    distance_box.metric(
+        "Distance",
+        f"{int(processor.distance)} px"
     )
 
 
-
-    # Detect hands
-
-    img = detector.findHands(
-        img
+    fps_box.metric(
+        "FPS",
+        int(processor.fps)
     )
-
-
-    lmList = detector.findPosition(
-        img
-    )
-
-
-    brightnessValue = 0
-
-    distance = 0
-
-
-
-    # ----------------------------
-    # Finger Distance
-    # ----------------------------
-
-    if len(lmList) != 0:
-
-
-        x1 = lmList[4][1]
-        y1 = lmList[4][2]
-
-
-        x2 = lmList[8][1]
-        y2 = lmList[8][2]
-
-
-
-        cv2.circle(
-            img,
-            (x1,y1),
-            10,
-            (255,0,255),
-            cv2.FILLED
-        )
-
-
-        cv2.circle(
-            img,
-            (x2,y2),
-            10,
-            (255,0,255),
-            cv2.FILLED
-        )
-
-
-
-        cv2.line(
-            img,
-            (x1,y1),
-            (x2,y2),
-            (0,255,0),
-            3
-        )
-
-
-
-        distance = brightness.calculateDistance(
-            (x1,y1),
-            (x2,y2)
-        )
-
-
-
-        brightnessValue = brightness.distanceToBrightness(
-            distance
-        )
-
-
-
-        status.success(
-            "🟢 Hand Detected"
-        )
-
-
-
-    else:
-
-
-        status.error(
-            "🔴 No Hand Detected"
-        )
-
-
-
-    # ----------------------------
-    # Display Values
-    # ----------------------------
-
-
-    brightness_text.metric(
-        "Brightness Level",
-        f"{brightnessValue}%"
-    )
-
-
-
-    distance_text.metric(
-        "Finger Distance",
-        f"{int(distance)} px"
-    )
-
 
 
     progress.progress(
-        int(brightnessValue)
+        int(processor.brightnessValue)
     )
 
 
+else:
 
-    fps = 1 / (time.time() - start_time)
-
-
-
-    fps_text.metric(
-        "FPS",
-        f"{int(fps)}"
-    )
-
-
-
-    # Convert color
-
-    img = cv2.cvtColor(
-        img,
-        cv2.COLOR_BGR2RGB
-    )
-
-
-
-    frame_placeholder.image(
-        img,
-        channels="RGB",
-        use_container_width=True
+    status_box.warning(
+        "Camera not started"
     )
 
 
@@ -279,19 +273,19 @@ if image is not None:
 
 st.markdown("---")
 
+
 st.info(
-    """
-    ### How it works
+"""
+### Working
 
-    🖐 Hand is detected using MediaPipe.
+🖐 MediaPipe detects hand landmarks
 
-    👍 Thumb and index finger distance is calculated.
+👍 Thumb + Index finger distance is calculated
 
-    📏 Distance is converted into brightness percentage.
+📏 Distance converted into brightness %
 
-    ⚠️ Streamlit Cloud can show gesture detection,
-    but cannot control your laptop brightness.
+🌐 Streamlit Cloud supports webcam detection
 
-    Run locally for actual screen brightness control.
-    """
+⚠️ Actual laptop brightness control works only locally
+"""
 )
