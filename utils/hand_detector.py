@@ -1,5 +1,7 @@
 import cv2
-import mediapipe as mp
+import mediapipe.python.solutions as solutions
+import mediapipe.python.solutions.hands as mpHands
+import mediapipe.python.solutions.drawing_utils as mpDraw
 
 
 class HandDetector:
@@ -17,16 +19,12 @@ class HandDetector:
         self.detectionCon = detectionCon
         self.trackCon = trackCon
 
-        self.mpHands = mp.solutions.hands
+        self.hands = mpHands.Hands(
+        min_detection_confidence=detectionCon,
+        min_tracking_confidence=trackCon
+        )   
 
-        self.hands = self.mpHands.Hands(
-            static_image_mode=self.mode,
-            max_num_hands=self.maxHands,
-            min_detection_confidence=self.detectionCon,
-            min_tracking_confidence=self.trackCon
-        )
-
-        self.mpDraw = mp.solutions.drawing_utils
+        self.mpDraw = mpDraw
         self.results = None
 
     def findHands(self, img, draw=True):

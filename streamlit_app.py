@@ -7,7 +7,8 @@ from utils.brightness_controller import BrightnessController
 
 import sys
 import mediapipe as mp
-
+import os
+os.environ["MEDIAPIPE_DISABLE_GPU"] = "1"
 
 # ----------------------------
 # Page Configuration
