@@ -4,3 +4,4 @@ mediapipe==0.10.32
 numpy==1.26.4
 Pillow==10.4.0
 screen-brightness-control
+av
