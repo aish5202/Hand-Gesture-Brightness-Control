@@ -1,9 +1,3 @@
 ffmpeg
-libavformat-dev
-libavcodec-dev
-libavdevice-dev
-libavutil-dev
-libavfilter-dev
-libswscale-dev
-libswresample-dev
-pkg-config
+libgl1
+libglib2.0-0
